@@ -7,14 +7,12 @@ from supabase import create_client, Client
 from config import SUPABASE_URL, SUPABASE_KEY
 
 
-def get_supabase() -> Client:
-    """Return an initialized Supabase client."""
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        raise RuntimeError(
-            "SUPABASE_URL and SUPABASE_KEY must be set in your .env file."
-        )
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
-
-
-# Shared client singleton
-supabase: Client = get_supabase() if SUPABASE_URL and SUPABASE_KEY else None
+# Shared client singleton — initialized if keys are present
+supabase: Client = None
+if SUPABASE_URL and SUPABASE_KEY:
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    except Exception as e:
+        print(f"[Database] Warning: Failed to connect to Supabase: {e}")
+else:
+    print("[Database] Warning: SUPABASE_URL/KEY missing. System running in DEMO mode.")

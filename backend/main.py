@@ -22,7 +22,7 @@ from routes.alert_routes import router as alert_router
 
 app = FastAPI(
     title=f"{APP_NAME} API",
-    description="Student Performance Prediction & Monitoring System — Team: Strategic Minds | P-02",
+    description="Student Performance Prediction & Monitoring System",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",

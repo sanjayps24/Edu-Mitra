@@ -3,9 +3,9 @@ auth_routes.py — Authentication endpoints.
 Handles user registration and login with JWT token issuance.
 """
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from models import UserRegister, UserLogin, TokenResponse
-from auth import hash_password, verify_password, create_access_token
+from auth import hash_password, verify_password, create_access_token, get_current_user
 from database import supabase
 
 router = APIRouter()
@@ -93,12 +93,9 @@ async def login(credentials: UserLogin):
 
 
 @router.get("/me", response_model=dict)
-async def get_current_user_info(token_data: dict = None):
+async def get_current_user_info(current_user: dict = Depends(get_current_user)):
     """
     Return current user's info from their JWT token.
     Protected endpoint — requires Authorization: Bearer <token>.
     """
-    from auth import get_current_user
-    from fastapi import Depends
-    # This is handled via dependency injection in the actual call
-    return {"message": "Use /docs to test authenticated endpoints."}
+    return current_user

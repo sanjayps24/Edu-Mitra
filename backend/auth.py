@@ -75,10 +75,11 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
     return decode_token(token)
 
 
-async def require_role(*roles: str):
+def require_role(*roles: str):
     """
     Factory for role-based access control dependencies.
-    Usage: Depends(require_role('admin', 'teacher'))
+    Returns a FastAPI-compatible dependency checker.
+    Usage: Depends(require_role('admin', 'teacher'))  — no await needed.
     """
     async def role_checker(current_user: dict = Depends(get_current_user)):
         if current_user.get("role") not in roles:
