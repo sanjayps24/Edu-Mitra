@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Teacher Dashboard | EduMitra</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { font-family: 'Inter', sans-serif; }
+    body { background: #0f172a; }
+    @keyframes fadeInUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+    .fade-in { animation: fadeInUp 0.4s ease-out forwards; }
+    .glass { background:rgba(255,255,255,0.04);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.08); }
+    .card { background:#1e293b;border:1px solid rgba(255,255,255,0.07);border-radius:16px; }
+    .sidebar-link { display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;color:#94a3b8;font-size:14px;font-weight:500;transition:all 0.2s;cursor:pointer;text-decoration:none; }
+    .sidebar-link:hover { background:rgba(16,185,129,0.1);color:#6ee7b7; }
+    .sidebar-link.active { background:rgba(16,185,129,0.15);color:#10b981;border-left:3px solid #10b981; }
+
+    /* Table styles */
+    .data-table { width:100%;border-collapse:collapse; }
+    .data-table th { padding:12px 16px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;background:#162032;border-bottom:1px solid rgba(255,255,255,0.06); }
+    .data-table td { padding:14px 16px;font-size:13px;color:#cbd5e1;border-bottom:1px solid rgba(255,255,255,0.04); }
+    .data-table tr:hover td { background:rgba(255,255,255,0.02); }
+    .data-table tr:last-child td { border-bottom:none; }
+
+    /* Risk badges */
+    .badge-low    { background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.3); }
+    .badge-medium { background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.3); }
+    .badge-high   { background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid rgba(239,68,68,0.3); }
+
+    /* Input styles */
+    .form-input { background:#162032;border:1px solid rgba(255,255,255,0.1);color:white;transition:all 0.2s; }
+    .form-input:focus { outline:none;border-color:#10b981;box-shadow:0 0 0 3px rgba(16,185,129,0.15); }
+    .form-input::placeholder { color:#374151; }
+
+    /* Modal */
+    .modal-overlay { position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px; }
+    .modal-box { background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:20px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto; }
+
+    /* Alert badge pulse */
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+    .pulse { animation: pulse 2s ease-in-out infinite; }
+
+    /* Sort arrows */
+    .sortable:hover { cursor:pointer;color:#10b981; }
+    .sort-asc::after  { content:" ↑"; }
+    .sort-desc::after { content:" ↓"; }
+
+    ::-webkit-scrollbar { width:6px; }
+    ::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1);border-radius:3px; }
+
+    @media(max-width:768px) { #sidebar{ display:none;position:fixed;inset:0;z-index:50;width:100%; } #sidebar.open{display:flex;width:16rem;} }
+  </style>
+</head>
+<body class="text-white min-h-screen flex">
+
+<!-- ── SIDEBAR ────────────────────────────────────────────────────────────── -->
+<aside id="sidebar" class="w-64 min-h-screen bg-slate-900 border-r border-slate-800 flex flex-col flex-shrink-0">
+  <div class="p-6 border-b border-slate-800">
+    <a href="index.html" class="flex items-center gap-3">
+      <div class="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center">
+        <span class="text-white font-bold">E</span>
+      </div>
+      <span class="text-lg font-black text-white">Edu<span class="text-emerald-400">Mitra</span></span>
+    </a>
+    <div class="mt-4 flex items-center gap-3">
+      <div class="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full flex items-center justify-center font-bold text-sm" id="avatarText">T</div>
+      <div>
+        <div class="text-sm font-semibold" id="sidebarName">Loading...</div>
+        <div class="text-xs text-emerald-400">👩‍🏫 Teacher</div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="flex-1 p-4 space-y-1">
+    <a class="sidebar-link active" onclick="showSection('overview')" id="nav-overview">
+      <span>📊</span> Overview
+    </a>
+    <a class="sidebar-link" onclick="showSection('students')" id="nav-students">
+      <span>👥</span> My Students
+    </a>
+    <a class="sidebar-link" onclick="showSection('alerts')" id="nav-alerts">
+      <span>🔔</span> High-Risk Alerts
+      <span id="alertCount" class="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full hidden">0</span>
+    </a>
+    <a class="sidebar-link" onclick="showSection('addStudent')" id="nav-addStudent">
+      <span>➕</span> Add Student
+    </a>
+    <a class="sidebar-link" onclick="showSection('analytics')" id="nav-analytics">
+      <span>📈</span> Analytics
+    </a>
+  </nav>
+
+  <div class="p-4 border-t border-slate-800">
+    <button onclick="logout()" class="w-full sidebar-link justify-center text-red-400 hover:bg-red-500/10 hover:text-red-300">
+      <span>🚪</span> Sign Out
+    </button>
+  </div>
+</aside>
+
+<!-- ── MAIN CONTENT ─────────────────────────────────────────────────────────── -->
+<div class="flex-1 flex flex-col min-w-0">
+
+  <!-- Topbar -->
+  <header class="bg-slate-900/80 backdrop-blur border-b border-slate-800 px-6 py-4 flex items-center justify-between sticky top-0 z-30">
+    <div class="flex items-center gap-4">
+      <button class="md:hidden text-slate-400" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+      <div>
+        <h1 class="text-base font-bold text-white" id="pageTitle">Teacher Dashboard</h1>
+        <p class="text-xs text-slate-500" id="pageSubtitle">Class Performance Overview</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <button onclick="refreshData()" class="text-slate-400 hover:text-white transition-colors text-sm px-3 py-2 rounded-lg hover:bg-slate-800">
+        🔄 Refresh
+      </button>
+      <div class="text-right hidden sm:block">
+        <div class="text-sm font-semibold" id="topName">—</div>
+        <div class="text-xs text-slate-500">Teacher</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 overflow-y-auto p-6 space-y-6">
+
+    <!-- ── OVERVIEW ───────────────────────────────────────────────────────── -->
+    <section id="section-overview" class="space-y-6">
+      <!-- Summary Stats -->
+      <div class="fade-in grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="card p-5">
+          <div class="text-xs text-slate-400 mb-1">Total Students</div>
+          <div class="text-3xl font-black text-white" id="statTotal">—</div>
+          <div class="text-xs text-emerald-400 mt-1">In my class</div>
+        </div>
+        <div class="card p-5">
+          <div class="text-xs text-slate-400 mb-1">Low Risk 🟢</div>
+          <div class="text-3xl font-black text-emerald-400" id="statLow">—</div>
+          <div class="text-xs text-slate-400 mt-1 flex items-center gap-1" id="pctLow">—%</div>
+        </div>
+        <div class="card p-5">
+          <div class="text-xs text-slate-400 mb-1">Medium Risk 🟡</div>
+          <div class="text-3xl font-black text-yellow-400" id="statMedium">—</div>
+          <div class="text-xs text-slate-400 mt-1" id="pctMedium">—%</div>
+        </div>
+        <div class="card p-5">
+          <div class="text-xs text-slate-400 mb-1">High Risk 🔴</div>
+          <div class="text-3xl font-black text-red-400" id="statHigh">—</div>
+          <div class="text-xs text-red-400 mt-1 pulse" id="pctHigh">—%</div>
+        </div>
+      </div>
+
+      <!-- Charts Row -->
+      <div class="grid md:grid-cols-2 gap-6">
+        <div class="card p-6">
+          <h2 class="text-sm font-semibold text-slate-300 mb-4">Risk Distribution</h2>
+          <div class="h-56 flex items-center justify-center">
+            <canvas id="riskDonutChart"></canvas>
+          </div>
+        </div>
+        <div class="card p-6">
+          <h2 class="text-sm font-semibold text-slate-300 mb-4">Class Avg. Scores</h2>
+          <div class="h-56">
+            <canvas id="classBarChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent High-Risk Alert Banner -->
+      <div id="alertBanner" class="hidden card border border-red-500/30 bg-red-500/5 p-5 flex items-center gap-4">
+        <div class="text-3xl">⚠️</div>
+        <div class="flex-1">
+          <div class="font-semibold text-red-400">High-Risk Students Detected</div>
+          <div class="text-sm text-slate-400 mt-1" id="alertBannerText">—</div>
+        </div>
+        <button onclick="showSection('alerts')" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl text-xs font-semibold transition-colors">
+          View Alerts
+        </button>
+      </div>
+    </section>
+
+    <!-- ── STUDENTS TABLE ─────────────────────────────────────────────────── -->
+    <section id="section-students" class="hidden space-y-4">
+      <!-- Search & Filter -->
+      <div class="flex flex-col sm:flex-row gap-3">
+        <div class="relative flex-1">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">🔍</span>
+          <input id="searchInput" type="text" placeholder="Search by name or email..."
+            class="form-input w-full pl-9 pr-4 py-3 rounded-xl text-sm"
+            oninput="filterStudents()" />
+        </div>
+        <select id="riskFilter" onchange="filterStudents()"
+          class="form-input px-4 py-3 rounded-xl text-sm min-w-[140px]">
+          <option value="">All Risk Levels</option>
+          <option value="Low">🟢 Low Risk</option>
+          <option value="Medium">🟡 Medium Risk</option>
+          <option value="High">🔴 High Risk</option>
+        </select>
+        <button onclick="showSection('addStudent')"
+          class="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3 rounded-xl text-sm font-semibold flex items-center gap-2 transition-colors">
+          ➕ Add Student
+        </button>
+      </div>
+
+      <!-- Table -->
+      <div class="card overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th class="sortable" onclick="sortTable('name')">Student</th>
+                <th class="sortable" onclick="sortTable('attendance_pct')">Attendance</th>
+                <th class="sortable" onclick="sortTable('assignment_avg')">Assignments</th>
+                <th class="sortable" onclick="sortTable('exam_avg')">Exam Avg</th>
+                <th class="sortable" onclick="sortTable('risk_level')">Risk</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="studentTableBody">
+              <tr><td colspan="6" class="text-center text-slate-500 py-12">Loading students...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="px-4 py-3 border-t border-slate-800 text-xs text-slate-500 flex items-center justify-between">
+          <span id="tableCount">—</span>
+          <span class="text-slate-600">Click column headers to sort</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── HIGH-RISK ALERTS ───────────────────────────────────────────────── -->
+    <section id="section-alerts" class="hidden space-y-4">
+      <div class="card border border-red-500/20 overflow-hidden">
+        <div class="p-5 border-b border-slate-800 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <span class="text-xl">🔔</span>
+            <div>
+              <div class="font-semibold text-white">High-Risk Student Alerts</div>
+              <div class="text-xs text-slate-400">Students requiring immediate attention</div>
+            </div>
+          </div>
+          <span id="alertCountBadge" class="bg-red-500 text-white text-xs px-3 py-1 rounded-full font-semibold">0</span>
+        </div>
+        <div id="alertsList" class="divide-y divide-slate-800">
+          <div class="p-8 text-center text-slate-500">Loading alerts...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── ADD STUDENT FORM ───────────────────────────────────────────────── -->
+    <section id="section-addStudent" class="hidden">
+      <div class="card p-6 max-w-2xl">
+        <h2 class="text-base font-bold text-white mb-6 flex items-center gap-2">
+          <span>➕</span> Add New Student Record
+        </h2>
+        <form id="addStudentForm" onsubmit="handleAddStudent(event)" class="space-y-5">
+          <div class="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-2">Student Full Name *</label>
+              <input id="s_name" type="text" required placeholder="e.g. John Doe"
+                class="form-input w-full px-4 py-3 rounded-xl text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-2">Email Address *</label>
+              <input id="s_email" type="email" required placeholder="student@uni.edu"
+                class="form-input w-full px-4 py-3 rounded-xl text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-2">Department</label>
+              <input id="s_dept" type="text" placeholder="e.g. Computer Science"
+                class="form-input w-full px-4 py-3 rounded-xl text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-2">Semester</label>
+              <select id="s_sem" class="form-input w-full px-4 py-3 rounded-xl text-sm">
+                <option value="Semester 1">Semester 1</option>
+                <option value="Semester 2">Semester 2</option>
+                <option value="Semester 3">Semester 3</option>
+                <option value="Semester 4" selected>Semester 4</option>
+                <option value="Semester 5">Semester 5</option>
+                <option value="Semester 6">Semester 6</option>
+                <option value="Semester 7">Semester 7</option>
+                <option value="Semester 8">Semester 8</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Academic Scores -->
+          <div class="border-t border-slate-700 pt-5">
+            <h3 class="text-sm font-semibold text-slate-300 mb-4">Academic Data</h3>
+            <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-2">Attendance % *</label>
+                <input id="s_att" type="number" min="0" max="100" step="0.1" required placeholder="75"
+                  class="form-input w-full px-4 py-3 rounded-xl text-sm" oninput="updateLivePreview()" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-2">Assignment Avg *</label>
+                <input id="s_assign" type="number" min="0" max="100" step="0.1" required placeholder="70"
+                  class="form-input w-full px-4 py-3 rounded-xl text-sm" oninput="updateLivePreview()" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-2">Midterm Score *</label>
+                <input id="s_mid" type="number" min="0" max="100" step="0.1" required placeholder="60"
+                  class="form-input w-full px-4 py-3 rounded-xl text-sm" oninput="updateLivePreview()" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-2">Final Exam Score *</label>
+                <input id="s_final" type="number" min="0" max="100" step="0.1" required placeholder="65"
+                  class="form-input w-full px-4 py-3 rounded-xl text-sm" oninput="updateLivePreview()" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-2">Quiz Average *</label>
+                <input id="s_quiz" type="number" min="0" max="100" step="0.1" required placeholder="72"
+                  class="form-input w-full px-4 py-3 rounded-xl text-sm" oninput="updateLivePreview()" />
+              </div>
+              <!-- Live Risk Preview -->
+              <div class="flex flex-col justify-end">
+                <label class="block text-xs font-medium text-slate-400 mb-2">Predicted Risk</label>
+                <div id="liveRiskPreview" class="px-4 py-3 rounded-xl text-sm font-bold text-center border badge-medium">
+                  Medium Risk
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Error / Success -->
+          <div id="addError"   class="hidden px-4 py-3 bg-red-500/15 border border-red-500/30 rounded-xl text-red-400 text-sm"></div>
+          <div id="addSuccess" class="hidden px-4 py-3 bg-emerald-500/15 border border-emerald-500/30 rounded-xl text-emerald-400 text-sm"></div>
+
+          <div class="flex gap-3 pt-2">
+            <button type="submit" id="addBtn"
+              class="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl text-sm font-semibold transition-colors flex items-center gap-2">
+              <span id="addBtnText">➕ Add Student</span>
+            </button>
+            <button type="button" onclick="document.getElementById('addStudentForm').reset();updateLivePreview();"
+              class="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-xl text-sm font-semibold transition-colors">
+              Reset
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- ── ANALYTICS ─────────────────────────────────────────────────────── -->
+    <section id="section-analytics" class="hidden space-y-6">
+      <div class="grid md:grid-cols-2 gap-6">
+        <div class="card p-6">
+          <h2 class="text-sm font-semibold text-slate-300 mb-4">Attendance Distribution</h2>
+          <div class="h-64"><canvas id="attDistChart"></canvas></div>
+        </div>
+        <div class="card p-6">
+          <h2 class="text-sm font-semibold text-slate-300 mb-4">Score Distribution</h2>
+          <div class="h-64"><canvas id="scoreDistChart"></canvas></div>
+        </div>
+      </div>
+      <div class="card p-6">
+        <h2 class="text-sm font-semibold text-slate-300 mb-4">Class Performance Overview</h2>
+        <div class="h-72"><canvas id="perfOverviewChart"></canvas></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ── EDIT STUDENT MODAL ────────────────────────────────────────────────── -->
+<div id="editModal" class="modal-overlay hidden" onclick="closeModal(event)">
+  <div class="modal-box p-6">
+    <div class="flex items-center justify-between mb-6">
+      <h3 class="text-base font-bold text-white">✏️ Edit Student Record</h3>
+      <button onclick="closeEditModal()" class="text-slate-400 hover:text-white text-xl">✕</button>
+    </div>
+    <form id="editStudentForm" onsubmit="handleEditStudent(event)" class="space-y-4">
+      <input type="hidden" id="edit_id" />
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-2">Student Name</label>
+          <input id="edit_name" type="text" readonly class="form-input w-full px-4 py-3 rounded-xl text-sm bg-slate-800 cursor-not-allowed" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-2">Email</label>
+          <input id="edit_email" type="text" readonly class="form-input w-full px-4 py-3 rounded-xl text-sm bg-slate-800 cursor-not-allowed" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-2">Attendance %</label>
+          <input id="edit_att" type="number" min="0" max="100" step="0.1" required class="form-input w-full px-4 py-3 rounded-xl text-sm" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-2">Assignment Avg</label>
+          <input id="edit_assign" type="number" min="0" max="100" step="0.1" required class="form-input w-full px-4 py-3 rounded-xl text-sm" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-2">Midterm Score</label>
+          <input id="edit_mid" type="number" min="0" max="100" step="0.1" required class="form-input w-full px-4 py-3 rounded-xl text-sm" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-2">Final Exam Score</label>
+          <input id="edit_final" type="number" min="0" max="100" step="0.1" required class="form-input w-full px-4 py-3 rounded-xl text-sm" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-2">Quiz Average</label>
+          <input id="edit_quiz" type="number" min="0" max="100" step="0.1" required class="form-input w-full px-4 py-3 rounded-xl text-sm" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-2">Semester</label>
+          <select id="edit_sem" class="form-input w-full px-4 py-3 rounded-xl text-sm">
+            <option>Semester 1</option><option>Semester 2</option><option>Semester 3</option>
+            <option>Semester 4</option><option>Semester 5</option><option>Semester 6</option>
+            <option>Semester 7</option><option>Semester 8</option>
+          </select>
+        </div>
+      </div>
+      <div id="editError" class="hidden px-4 py-3 bg-red-500/15 border border-red-500/30 rounded-xl text-red-400 text-sm"></div>
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl text-sm font-semibold transition-colors">
+          💾 Save Changes
+        </button>
+        <button type="button" onclick="closeEditModal()" class="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-xl text-sm font-semibold transition-colors">
+          Cancel
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── VIEW STUDENT MODAL ────────────────────────────────────────────────── -->
+<div id="viewModal" class="modal-overlay hidden" onclick="closeModal(event)">
+  <div class="modal-box p-6">
+    <div class="flex items-center justify-between mb-6">
+      <h3 class="text-base font-bold text-white">📊 Student Performance</h3>
+      <button onclick="closeViewModal()" class="text-slate-400 hover:text-white text-xl">✕</button>
+    </div>
+    <div id="viewModalContent"></div>
+  </div>
+</div>
+
+<!-- ── DELETE CONFIRM MODAL ──────────────────────────────────────────────── -->
+<div id="deleteModal" class="modal-overlay hidden">
+  <div class="modal-box p-6 max-w-sm">
+    <div class="text-center mb-6">
+      <div class="text-5xl mb-4">🗑️</div>
+      <h3 class="text-lg font-bold text-white mb-2">Delete Student Record?</h3>
+      <p class="text-sm text-slate-400">This action cannot be undone. The student's academic record will be permanently removed.</p>
+      <p class="text-sm font-semibold text-white mt-3" id="deleteStudentName">—</p>
+    </div>
+    <div class="flex gap-3">
+      <button onclick="confirmDelete()" class="flex-1 bg-red-600 hover:bg-red-500 text-white py-3 rounded-xl text-sm font-semibold transition-colors">
+        Yes, Delete
+      </button>
+      <button onclick="document.getElementById('deleteModal').classList.add('hidden')" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl text-sm font-semibold transition-colors">
+        Cancel
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="js/auth.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/teacher.js"></script>
+</body>
+</html>

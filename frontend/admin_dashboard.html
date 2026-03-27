@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard | EduMitra</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { font-family: 'Inter', sans-serif; }
+    body { background: #0f172a; }
+    @keyframes fadeInUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+    .fade-in { animation: fadeInUp 0.4s ease-out forwards; }
+    .glass { background:rgba(255,255,255,0.04);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.08); }
+    .card { background:#1e293b;border:1px solid rgba(255,255,255,0.07);border-radius:16px; }
+    .sidebar-link { display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;color:#94a3b8;font-size:14px;font-weight:500;transition:all 0.2s;cursor:pointer;text-decoration:none; }
+    .sidebar-link:hover { background:rgba(139,92,246,0.1);color:#c4b5fd; }
+    .sidebar-link.active { background:rgba(139,92,246,0.15);color:#8b5cf6;border-left:3px solid #8b5cf6; }
+
+    .data-table { width:100%;border-collapse:collapse; }
+    .data-table th { padding:12px 16px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;background:#162032;border-bottom:1px solid rgba(255,255,255,0.06); }
+    .data-table td { padding:12px 16px;font-size:13px;color:#cbd5e1;border-bottom:1px solid rgba(255,255,255,0.04); }
+    .data-table tr:hover td { background:rgba(255,255,255,0.02); }
+
+    .badge-student { background:rgba(59,130,246,0.12);color:#3b82f6;border:1px solid rgba(59,130,246,0.3); }
+    .badge-teacher { background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.3); }
+    .badge-admin   { background:rgba(139,92,246,0.12);color:#8b5cf6;border:1px solid rgba(139,92,246,0.3); }
+    .badge-low     { background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.3); }
+    .badge-medium  { background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.3); }
+    .badge-high    { background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid rgba(239,68,68,0.3); }
+
+    .form-input { background:#162032;border:1px solid rgba(255,255,255,0.1);color:white;transition:all 0.2s; }
+    .form-input:focus { outline:none;border-color:#8b5cf6;box-shadow:0 0 0 3px rgba(139,92,246,0.15); }
+    .form-input::placeholder { color:#374151; }
+
+    .modal-overlay { position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px; }
+    .modal-box { background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:20px;width:100%;max-width:500px;max-height:90vh;overflow-y:auto; }
+
+    .stat-trend-up   { color:#10b981; }
+    .stat-trend-down { color:#ef4444; }
+
+    @keyframes countUp { from { opacity:0; } to { opacity:1; } }
+    .count-anim { animation: countUp 0.5s ease-out; }
+
+    ::-webkit-scrollbar { width:6px; }
+    ::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1);border-radius:3px; }
+    @media(max-width:768px) { #sidebar{ display:none;position:fixed;inset:0;z-index:50;} #sidebar.open{display:flex;width:16rem;} }
+  </style>
+</head>
+<body class="text-white min-h-screen flex">
+
+<!-- ── SIDEBAR ────────────────────────────────────────────────────────────── -->
+<aside id="sidebar" class="w-64 min-h-screen bg-slate-900 border-r border-slate-800 flex flex-col flex-shrink-0">
+  <div class="p-6 border-b border-slate-800">
+    <a href="index.html" class="flex items-center gap-3">
+      <div class="w-9 h-9 bg-purple-500 rounded-xl flex items-center justify-center">
+        <span class="text-white font-bold">E</span>
+      </div>
+      <span class="text-lg font-black text-white">Edu<span class="text-purple-400">Mitra</span></span>
+    </a>
+    <div class="mt-4 flex items-center gap-3">
+      <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center font-bold text-sm" id="avatarText">A</div>
+      <div>
+        <div class="text-sm font-semibold" id="sidebarName">Loading...</div>
+        <div class="text-xs text-purple-400">🛡️ Admin</div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="flex-1 p-4 space-y-1">
+    <a class="sidebar-link active" onclick="showSection('overview')"    id="nav-overview">    <span>📊</span> Overview    </a>
+    <a class="sidebar-link"        onclick="showSection('users')"       id="nav-users">       <span>👥</span> Manage Users </a>
+    <a class="sidebar-link"        onclick="showSection('students')"    id="nav-students">    <span>🎓</span> All Students </a>
+    <a class="sidebar-link"        onclick="showSection('alerts')"      id="nav-alerts">      <span>🔔</span> Send Alerts
+      <span id="highRiskCount" class="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full hidden">0</span>
+    </a>
+    <a class="sidebar-link"        onclick="showSection('analytics')"   id="nav-analytics">   <span>📈</span> Analytics    </a>
+    <a class="sidebar-link"        onclick="showSection('settings')"    id="nav-settings">    <span>⚙️</span> Settings     </a>
+  </nav>
+
+  <div class="p-4 border-t border-slate-800">
+    <button onclick="logout()" class="w-full sidebar-link justify-center text-red-400 hover:bg-red-500/10 hover:text-red-300">
+      <span>🚪</span> Sign Out
+    </button>
+  </div>
+</aside>
+
+<!-- ── MAIN CONTENT ─────────────────────────────────────────────────────────── -->
+<div class="flex-1 flex flex-col min-w-0">
+
+  <header class="bg-slate-900/80 backdrop-blur border-b border-slate-800 px-6 py-4 flex items-center justify-between sticky top-0 z-30">
+    <div class="flex items-center gap-4">
+      <button class="md:hidden text-slate-400" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+      <div>
+        <h1 class="text-base font-bold text-white" id="pageTitle">Admin Dashboard</h1>
+        <p class="text-xs text-slate-500" id="pageSubtitle">System-wide overview</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <button onclick="refreshAll()" class="text-slate-400 hover:text-white text-sm px-3 py-2 rounded-lg hover:bg-slate-800 transition-colors">🔄 Refresh</button>
+      <div class="text-right hidden sm:block">
+        <div class="text-sm font-semibold" id="topName">—</div>
+        <div class="text-xs text-slate-500">Administrator</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 overflow-y-auto p-6 space-y-6">
+
+    <!-- ── OVERVIEW ──────────────────────────────────────────────────────── -->
+    <section id="section-overview" class="space-y-6">
+      <!-- KPI Cards -->
+      <div class="fade-in grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="card p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="text-xs text-slate-400">Total Students</div>
+            <div class="text-2xl">🎓</div>
+          </div>
+          <div class="text-3xl font-black text-white" id="kpiStudents">—</div>
+          <div class="text-xs text-blue-400 mt-1">Enrolled</div>
+        </div>
+        <div class="card p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="text-xs text-slate-400">Total Teachers</div>
+            <div class="text-2xl">👩‍🏫</div>
+          </div>
+          <div class="text-3xl font-black text-white" id="kpiTeachers">—</div>
+          <div class="text-xs text-emerald-400 mt-1">Active</div>
+        </div>
+        <div class="card p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="text-xs text-slate-400">High Risk</div>
+            <div class="text-2xl">🔴</div>
+          </div>
+          <div class="text-3xl font-black text-red-400" id="kpiHighRisk">—</div>
+          <div class="text-xs text-red-400 mt-1 animate-pulse" id="kpiHighRiskPct">—</div>
+        </div>
+        <div class="card p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="text-xs text-slate-400">Avg Attendance</div>
+            <div class="text-2xl">📅</div>
+          </div>
+          <div class="text-3xl font-black text-emerald-400" id="kpiAttendance">—</div>
+          <div class="text-xs text-slate-400 mt-1">Institution avg</div>
+        </div>
+      </div>
+
+      <!-- Second Row KPIs -->
+      <div class="grid grid-cols-3 gap-4">
+        <div class="card p-5 text-center">
+          <div class="text-2xl font-black text-emerald-400" id="kpiLow">—</div>
+          <div class="text-xs text-slate-400 mt-1">🟢 Low Risk</div>
+        </div>
+        <div class="card p-5 text-center">
+          <div class="text-2xl font-black text-yellow-400" id="kpiMedium">—</div>
+          <div class="text-xs text-slate-400 mt-1">🟡 Medium Risk</div>
+        </div>
+        <div class="card p-5 text-center">
+          <div class="text-2xl font-black text-slate-400" id="kpiAvgScore">—</div>
+          <div class="text-xs text-slate-400 mt-1">📊 Avg Exam Score</div>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div class="grid md:grid-cols-3 gap-6">
+        <div class="card p-6 md:col-span-1">
+          <h2 class="text-sm font-semibold text-slate-300 mb-4">Risk Distribution</h2>
+          <div class="h-52 flex items-center justify-center">
+            <canvas id="adminRiskChart"></canvas>
+          </div>
+        </div>
+        <div class="card p-6 md:col-span-2">
+          <h2 class="text-sm font-semibold text-slate-300 mb-4">Risk Trend (Last 6 Months)</h2>
+          <div class="h-52">
+            <canvas id="riskTrendChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── USER MANAGEMENT ────────────────────────────────────────────────── -->
+    <section id="section-users" class="hidden space-y-4">
+      <div class="flex flex-col sm:flex-row gap-3">
+        <div class="relative flex-1">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">🔍</span>
+          <input id="userSearch" type="text" placeholder="Search users..."
+            class="form-input w-full pl-9 pr-4 py-3 rounded-xl text-sm" oninput="filterUsers()" />
+        </div>
+        <select id="roleFilter" onchange="filterUsers()" class="form-input px-4 py-3 rounded-xl text-sm min-w-[140px]">
+          <option value="">All Roles</option>
+          <option value="student">Students</option>
+          <option value="teacher">Teachers</option>
+          <option value="admin">Admins</option>
+        </select>
+      </div>
+      <div class="card overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th>Department</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="userTableBody">
+              <tr><td colspan="5" class="text-center py-12 text-slate-500">Loading users...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="px-4 py-3 border-t border-slate-800 text-xs text-slate-500" id="userCount">—</div>
+      </div>
+    </section>
+
+    <!-- ── ALL STUDENTS ───────────────────────────────────────────────────── -->
+    <section id="section-students" class="hidden space-y-4">
+      <div class="flex flex-col sm:flex-row gap-3">
+        <div class="relative flex-1">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">🔍</span>
+          <input id="studentSearch" type="text" placeholder="Search students..."
+            class="form-input w-full pl-9 pr-4 py-3 rounded-xl text-sm" oninput="filterAllStudents()" />
+        </div>
+        <select id="studentRiskFilter" onchange="filterAllStudents()" class="form-input px-4 py-3 rounded-xl text-sm min-w-[140px]">
+          <option value="">All Risk Levels</option>
+          <option value="Low">🟢 Low</option>
+          <option value="Medium">🟡 Medium</option>
+          <option value="High">🔴 High</option>
+        </select>
+      </div>
+      <div class="card overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Attendance</th>
+                <th>Assignments</th>
+                <th>Exam Avg</th>
+                <th>Risk</th>
+                <th>Department</th>
+              </tr>
+            </thead>
+            <tbody id="allStudentTableBody">
+              <tr><td colspan="6" class="text-center py-12 text-slate-500">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="px-4 py-3 border-t border-slate-800 text-xs text-slate-500" id="studentCount">—</div>
+      </div>
+    </section>
+
+    <!-- ── ALERTS / NOTIFICATIONS ─────────────────────────────────────────── -->
+    <section id="section-alerts" class="hidden space-y-4">
+      <!-- Send Bulk Alert -->
+      <div class="card p-6">
+        <h2 class="text-base font-bold text-white mb-4 flex items-center gap-2">
+          <span>📧</span> Send Bulk Alert to Teachers
+        </h2>
+        <p class="text-sm text-slate-400 mb-5">
+          Trigger email notifications to all teachers whose students are classified as High Risk.
+        </p>
+        <div class="flex items-center gap-4">
+          <button onclick="sendBulkAlerts()" id="alertBtn"
+            class="bg-red-600 hover:bg-red-500 text-white px-6 py-3 rounded-xl text-sm font-semibold transition-colors flex items-center gap-2">
+            🔔 Send Alerts to All Teachers
+          </button>
+          <span id="alertStatus" class="text-sm text-slate-400 hidden"></span>
+        </div>
+      </div>
+
+      <!-- High-Risk Table -->
+      <div class="card overflow-hidden">
+        <div class="p-5 border-b border-slate-800 flex items-center justify-between">
+          <h2 class="font-semibold text-white flex items-center gap-2"><span>🔴</span> High-Risk Students</h2>
+          <span id="hrCount" class="bg-red-500/20 text-red-400 border border-red-500/30 text-xs px-3 py-1 rounded-full font-semibold">0</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Attendance</th>
+                <th>Assignments</th>
+                <th>Confidence</th>
+                <th>Department</th>
+              </tr>
+            </thead>
+            <tbody id="highRiskTable">
+              <tr><td colspan="5" class="text-center py-8 text-slate-500">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── ANALYTICS ─────────────────────────────────────────────────────── -->
+    <section id="section-analytics" class="hidden space-y-6">
+      <div class="grid md:grid-cols-2 gap-6">
+        <div class="card p-6">
+          <h2 class="text-sm font-semibold text-slate-300 mb-4">Department-wise Risk</h2>
+          <div class="h-64"><canvas id="deptChart"></canvas></div>
+        </div>
+        <div class="card p-6">
+          <h2 class="text-sm font-semibold text-slate-300 mb-4">Attendance vs Exam Score</h2>
+          <div class="h-64"><canvas id="scatterChart"></canvas></div>
+        </div>
+      </div>
+      <div class="card p-6">
+        <h2 class="text-sm font-semibold text-slate-300 mb-4">Monthly At-Risk Trends</h2>
+        <div class="h-72"><canvas id="monthlyTrendChart"></canvas></div>
+      </div>
+    </section>
+
+    <!-- ── SETTINGS ───────────────────────────────────────────────────────── -->
+    <section id="section-settings" class="hidden space-y-4 max-w-2xl">
+      <div class="card p-6">
+        <h2 class="text-base font-bold text-white mb-6">⚙️ System Settings</h2>
+        <div class="space-y-5">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-2">Attendance Alert Threshold (%)</label>
+            <input type="number" value="75" min="0" max="100"
+              class="form-input w-full px-4 py-3 rounded-xl text-sm max-w-xs" />
+            <p class="text-xs text-slate-500 mt-1">Students below this attendance will be monitored closely.</p>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-2">Risk Alert Mode</label>
+            <select class="form-input px-4 py-3 rounded-xl text-sm max-w-xs">
+              <option>Automatic (on predict)</option>
+              <option>Manual (admin triggers)</option>
+              <option>Scheduled (weekly)</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-2">Email Notifications</label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked class="w-4 h-4 accent-purple-500" />
+                <span class="text-sm text-slate-300">Send email alerts to teachers for high-risk students</span>
+              </label>
+            </div>
+          </div>
+          <button class="bg-purple-600 hover:bg-purple-500 text-white px-6 py-3 rounded-xl text-sm font-semibold transition-colors">
+            💾 Save Settings
+          </button>
+        </div>
+      </div>
+
+      <!-- System Info -->
+      <div class="card p-6">
+        <h3 class="text-sm font-semibold text-slate-300 mb-4">System Information</h3>
+        <div class="grid sm:grid-cols-2 gap-3 text-sm">
+          <div class="bg-slate-800/50 rounded-xl p-3">
+            <div class="text-xs text-slate-500">Backend</div>
+            <div class="text-white font-medium">FastAPI + Uvicorn</div>
+          </div>
+          <div class="bg-slate-800/50 rounded-xl p-3">
+            <div class="text-xs text-slate-500">Database</div>
+            <div class="text-white font-medium">Supabase (PostgreSQL)</div>
+          </div>
+          <div class="bg-slate-800/50 rounded-xl p-3">
+            <div class="text-xs text-slate-500">ML Model</div>
+            <div class="text-white font-medium">XGBoost Classifier</div>
+          </div>
+          <div class="bg-slate-800/50 rounded-xl p-3">
+            <div class="text-xs text-slate-500">Auth</div>
+            <div class="text-white font-medium">JWT (python-jose)</div>
+          </div>
+          <div class="bg-slate-800/50 rounded-xl p-3">
+            <div class="text-xs text-slate-500">API Docs</div>
+            <a href="http://localhost:8000/docs" target="_blank" class="text-purple-400 font-medium hover:underline">localhost:8000/docs →</a>
+          </div>
+          <div class="bg-slate-800/50 rounded-xl p-3">
+            <div class="text-xs text-slate-500">Version</div>
+            <div class="text-white font-medium">1.0.0 · Team Strategic Minds</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ── DELETE USER MODAL ─────────────────────────────────────────────────── -->
+<div id="deleteUserModal" class="modal-overlay hidden">
+  <div class="modal-box p-6 max-w-sm">
+    <div class="text-center mb-6">
+      <div class="text-5xl mb-4">👤</div>
+      <h3 class="text-lg font-bold text-white mb-2">Remove User?</h3>
+      <p class="text-sm text-slate-400">This will deactivate <span id="deleteUserName" class="font-semibold text-white">—</span>'s account.</p>
+    </div>
+    <div class="flex gap-3">
+      <button onclick="confirmDeleteUser()" class="flex-1 bg-red-600 hover:bg-red-500 text-white py-3 rounded-xl text-sm font-semibold">Yes, Remove</button>
+      <button onclick="document.getElementById('deleteUserModal').classList.add('hidden')" class="flex-1 bg-slate-700 text-white py-3 rounded-xl text-sm font-semibold">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/auth.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>
