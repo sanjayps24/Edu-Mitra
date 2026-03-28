@@ -94,3 +94,34 @@ def send_high_risk_alert(teacher_email: str, teacher_name: str, students: List[D
 
     except Exception as e:
         print(f"[Email] ❌ Failed to send alert to {teacher_email}: {e}")
+def send_risk_alert(teacher_email: str, student_name: str, risk_level: str, confidence: float) -> bool:
+    """Send a risk alert for a single student."""
+    if not SMTP_USER or not SMTP_PASSWORD:
+        return False
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"⚠️ {APP_NAME} Alert: {student_name} is at {risk_level} Risk"
+        msg["From"]    = SMTP_USER
+        msg["To"]      = teacher_email
+
+        html = f"""
+        <html>
+        <body>
+            <h2>High-Risk Alert</h2>
+            <p>Student <strong>{student_name}</strong> has been classified as <strong>{risk_level}</strong> risk.</p>
+            <p>Confidence: {confidence:.2%}</p>
+            <p>Please check the teacher dashboard for more details.</p>
+        </body>
+        </html>
+        """
+        msg.attach(MIMEText(html, "html"))
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(SMTP_USER, teacher_email, msg.as_string())
+        return True
+    except Exception as e:
+        print(f"[Email] Error: {e}")
+        return False

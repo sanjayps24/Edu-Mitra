@@ -6,11 +6,13 @@ Uses python-dotenv to support local .env files.
 import os
 from dotenv import load_dotenv
 
-# Load .env file if it exists (for local development)
-load_dotenv()
+# Load .env file using absolute path relative to this script. Use override=True to ensure .env values win.
+env_path = os.path.join(os.path.dirname(__file__), ".env")
+load_dotenv(dotenv_path=env_path, override=True)
 
-# ── Supabase ────────────────────────────────────────────────────────────────
-SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
+# ── Database ────────────────────────────────────────────────────────────────
+DATABASE_URL: str = os.getenv("DATABASE_URL", os.getenv("SUPABASE_URL", ""))
+# SUPABASE_KEY is kept for potential frontend usage, but not needed for direct Postgres
 SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
 
 # ── JWT ─────────────────────────────────────────────────────────────────────

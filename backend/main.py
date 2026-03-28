@@ -1,5 +1,6 @@
 """
 main.py — FastAPI application entrypoint for Edu-Mitra.
+# Last reload triggered at 2026-03-28T05:52:00Z
 Registers all routers, configures CORS, and provides a health check endpoint.
 """
 
@@ -10,6 +11,9 @@ from fastapi.responses import FileResponse
 import os
 
 from config import APP_NAME, DEBUG
+from database import engine, Base
+# Import models to ensure they are registered with Base metadata
+import database_models
 
 # Import all route modules
 from routes.auth_routes import router as auth_router
@@ -39,6 +43,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.on_event("startup")
+def startup_event():
+    """Run database synchronization on startup."""
+    try:
+        from database import engine, Base
+        Base.metadata.create_all(bind=engine)
+        print("[Database] Schema synchronized successfully.")
+    except Exception as e:
+        print(f"[Database] Error during schema sync: {e}")
 
 # ── Register Routers ──────────────────────────────────────────────────────────
 

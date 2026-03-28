@@ -5,9 +5,11 @@ Full Create / Read / Update / Delete operations for teachers and admins.
 
 from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List
+from sqlalchemy.orm import Session
 from models import StudentRecord, StudentUpdate, StudentSummary
 from auth import get_current_user, require_role
-from database import supabase
+from database import get_db
+from database_models import StudentRecord as DBStudentRecord
 from ml.predict import predict_risk
 
 router = APIRouter()
@@ -16,6 +18,7 @@ router = APIRouter()
 @router.post("/add", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def add_student(
     record: StudentRecord,
+    db: Session = Depends(get_db),
     current_user: dict = Depends(require_role("teacher", "admin"))
 ):
     """
@@ -32,73 +35,69 @@ async def add_student(
     }
     prediction = predict_risk(features)
 
-    student_data = {
-        "name":           record.name,
-        "email":          record.email,
-        "attendance_pct": record.attendance_pct,
-        "assignment_avg": record.assignment_avg,
-        "midterm_score":  record.midterm_score,
-        "final_score":    record.final_score,
-        "quiz_avg":       record.quiz_avg,
-        "semester":       record.semester,
-        "department":     record.department,
-        "teacher_id":     current_user.get("sub"),
-        "risk_level":     prediction["risk_level"],
-        "confidence":     prediction["confidence"],
-    }
+    new_student = DBStudentRecord(
+        name=record.name,
+        email=record.email,
+        attendance_pct=record.attendance_pct,
+        assignment_avg=record.assignment_avg,
+        midterm_score=record.midterm_score,
+        final_score=record.final_score,
+        quiz_avg=record.quiz_avg,
+        semester=record.semester,
+        department=record.department,
+        teacher_id=current_user.get("sub"),
+        risk_level=prediction["risk_level"],
+        confidence=prediction["confidence"],
+    )
+    
+    db.add(new_student)
+    try:
+        db.commit()
+        db.refresh(new_student)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to add student record: {str(e)}")
 
-    if supabase:
-        result = supabase.table("student_records").insert(student_data).execute()
-        if not result.data:
-            raise HTTPException(status_code=500, detail="Failed to add student record.")
-        created = result.data[0]
-        return {
-            "message":    "Student record added successfully.",
-            "student_id": created["id"],
-            "risk_level": prediction["risk_level"],
-        }
-    else:
-        return {
-            "message":    "Student record added (demo mode — no DB).",
-            "student_id": "demo-" + record.email,
-            "risk_level": prediction["risk_level"],
-        }
+    return {
+        "message":    "Student record added successfully.",
+        "student_id": str(new_student.id),
+        "risk_level": prediction["risk_level"],
+    }
 
 
 @router.get("/{student_id}/performance", response_model=dict)
 async def get_student_performance(
     student_id: str,
+    db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     """
     Get a student's full academic performance record.
     Students can only access their own data; teachers/admins can access all.
     """
-    if not supabase:
-        # Demo mode: return sample data
-        sample = {
-            "id": student_id, "name": "Demo Student", "email": "student@demo.com",
-            "attendance_pct": 74, "assignment_avg": 82,
-            "midterm_score": 58, "final_score": 65, "quiz_avg": 70,
-        }
-        prediction = predict_risk({k: sample[k] for k in ["attendance_pct","assignment_avg","midterm_score","final_score","quiz_avg"]})
-        return {**sample, **prediction}
-
-    result = supabase.table("student_records").select("*").eq("id", student_id).execute()
-    if not result.data:
+    student = db.query(DBStudentRecord).filter(DBStudentRecord.id == student_id).first()
+    if not student:
         raise HTTPException(status_code=404, detail="Student record not found.")
 
-    student = result.data[0]
     prediction = predict_risk({
-        "attendance_pct": student["attendance_pct"],
-        "assignment_avg": student["assignment_avg"],
-        "midterm_score":  student["midterm_score"],
-        "final_score":    student["final_score"],
-        "quiz_avg":       student.get("quiz_avg", 70),
+        "attendance_pct": float(student.attendance_pct),
+        "assignment_avg": float(student.assignment_avg),
+        "midterm_score":  float(student.midterm_score),
+        "final_score":    float(student.final_score),
+        "quiz_avg":       float(student.quiz_avg or 70),
     })
 
     return {
-        **student,
+        "id": str(student.id),
+        "name": student.name,
+        "email": student.email,
+        "attendance_pct": float(student.attendance_pct),
+        "assignment_avg": float(student.assignment_avg),
+        "midterm_score": float(student.midterm_score),
+        "final_score": float(student.final_score),
+        "quiz_avg": float(student.quiz_avg),
+        "semester": student.semester,
+        "department": student.department,
         "risk_level":         prediction["risk_level"],
         "confidence":         prediction["confidence"],
         "recommendations":    prediction["recommendations"],
@@ -108,27 +107,24 @@ async def get_student_performance(
 
 @router.get("/", response_model=List[StudentSummary])
 async def list_students(
+    db: Session = Depends(get_db),
     current_user: dict = Depends(require_role("teacher", "admin"))
 ):
     """List all student records with risk levels. Teacher/Admin only."""
-    if not supabase:
-        return []
-
-    result = supabase.table("student_records").select("*").execute()
-    students = result.data or []
+    students = db.query(DBStudentRecord).all()
 
     summaries = []
     for s in students:
-        exam_avg = (s.get("midterm_score", 0) + s.get("final_score", 0)) / 2
+        exam_avg = (float(s.midterm_score or 0) + float(s.final_score or 0)) / 2
         summaries.append(StudentSummary(
-            student_id=str(s["id"]),
-            name=s["name"],
-            email=s["email"],
-            attendance_pct=s["attendance_pct"],
-            assignment_avg=s["assignment_avg"],
+            student_id=str(s.id),
+            name=s.name,
+            email=s.email,
+            attendance_pct=float(s.attendance_pct),
+            assignment_avg=float(s.assignment_avg),
             exam_avg=exam_avg,
-            risk_level=s.get("risk_level"),
-            confidence=s.get("confidence"),
+            risk_level=s.risk_level,
+            confidence=float(s.confidence) if s.confidence else None,
         ))
     return summaries
 
@@ -137,6 +133,7 @@ async def list_students(
 async def update_student(
     student_id: str,
     updates: StudentUpdate,
+    db: Session = Depends(get_db),
     current_user: dict = Depends(require_role("teacher", "admin"))
 ):
     """Update a student's academic record. Re-runs ML prediction after update."""
@@ -144,26 +141,30 @@ async def update_student(
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields provided for update.")
 
-    if not supabase:
-        return {"message": "Updated (demo mode).", "risk_level": "Medium", "confidence": 0.75}
-
-    existing = supabase.table("student_records").select("*").eq("id", student_id).execute()
-    if not existing.data:
+    student = db.query(DBStudentRecord).filter(DBStudentRecord.id == student_id).first()
+    if not student:
         raise HTTPException(status_code=404, detail="Student record not found.")
 
-    merged = {**existing.data[0], **update_data}
-    prediction = predict_risk({
-        "attendance_pct": merged["attendance_pct"],
-        "assignment_avg": merged["assignment_avg"],
-        "midterm_score":  merged["midterm_score"],
-        "final_score":    merged["final_score"],
-        "quiz_avg":       merged.get("quiz_avg", 70),
-    })
-    update_data["risk_level"] = prediction["risk_level"]
-    update_data["confidence"]  = prediction["confidence"]
+    # Update fields
+    for key, value in update_data.items():
+        setattr(student, key, value)
 
-    result = supabase.table("student_records").update(update_data).eq("id", student_id).execute()
-    if not result.data:
+    # Re-predict
+    prediction = predict_risk({
+        "attendance_pct": float(student.attendance_pct),
+        "assignment_avg": float(student.assignment_avg),
+        "midterm_score":  float(student.midterm_score),
+        "final_score":    float(student.final_score),
+        "quiz_avg":       float(student.quiz_avg or 70),
+    })
+    
+    student.risk_level = prediction["risk_level"]
+    student.confidence = prediction["confidence"]
+
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=500, detail="Failed to update student record.")
 
     return {
@@ -176,9 +177,12 @@ async def update_student(
 @router.delete("/{student_id}", response_model=dict)
 async def delete_student(
     student_id: str,
+    db: Session = Depends(get_db),
     current_user: dict = Depends(require_role("teacher", "admin"))
 ):
     """Delete a student's academic record. Teacher/Admin only."""
-    if supabase:
-        supabase.table("student_records").delete().eq("id", student_id).execute()
+    student = db.query(DBStudentRecord).filter(DBStudentRecord.id == student_id).first()
+    if student:
+        db.delete(student)
+        db.commit()
     return {"message": "Student record deleted successfully."}

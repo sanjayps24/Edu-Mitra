@@ -5,76 +5,86 @@ Returns high-risk student lists and triggers email notifications.
 
 from fastapi import APIRouter, Depends, BackgroundTasks
 from typing import List
-from auth import get_current_user, require_role
-from database import supabase
-from services.email_service import send_high_risk_alert
+from sqlalchemy.orm import Session
+from datetime import datetime
+from models import Alert as AlertModel
+from auth import require_role
+from database import get_db
+from database_models import Alert, StudentRecord, User
+from services.email_service import send_risk_alert
 
 router = APIRouter()
 
 
 @router.get("/high-risk", response_model=List[dict])
-async def get_high_risk_students(
+async def list_high_risk_alerts(
+    db: Session = Depends(get_db),
     current_user: dict = Depends(require_role("teacher", "admin"))
 ):
     """Return all students currently classified as High risk."""
-    if not supabase:
-        return []
-
-    result = supabase.table("student_records") \
-        .select("*") \
-        .eq("risk_level", "High") \
-        .execute()
-
-    return [
-        {
-            "student_id":    str(s["id"]),
-            "name":          s["name"],
-            "email":         s["email"],
-            "attendance_pct":s["attendance_pct"],
-            "assignment_avg":s["assignment_avg"],
-            "risk_level":    s["risk_level"],
-            "confidence":    s.get("confidence"),
-            "department":    s.get("department"),
-        }
-        for s in (result.data or [])
-    ]
+    # Get high-risk records from DB
+    query = db.query(StudentRecord).filter(StudentRecord.risk_level == "High")
+    
+    # If teacher, filter for their students
+    if current_user.get("role") == "teacher":
+        query = query.filter(StudentRecord.teacher_id == current_user.get("sub"))
+    
+    high_risk_students = query.all()
+    
+    alerts = []
+    for s in high_risk_students:
+        alerts.append(AlertModel(
+            student_id=str(s.id),
+            name=s.name,
+            email=s.email,
+            risk_level=s.risk_level,
+            confidence=float(s.confidence or 0),
+            created_at=str(s.created_at)
+        ))
+    
+    return alerts
 
 
 @router.post("/notify", response_model=dict)
 async def send_alerts_to_teachers(
-    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
     current_user: dict = Depends(require_role("admin"))
 ):
     """
     Trigger email notifications to all teachers for their high-risk students.
-    Runs in background so the response is immediate. Admin only.
     """
-    if not supabase:
-        return {"message": "Demo mode — email alerts not sent.", "high_risk_count": 0}
+    # Fetch high-risk students and their teachers
+    high_risk = db.query(StudentRecord, User).join(User, StudentRecord.teacher_id == User.id).filter(StudentRecord.risk_level == "High").all()
+    
+    sent_count = 0
+    for s, t in high_risk:
+        # Check if alert already exists for this student/teacher
+        existing = db.query(Alert).filter(Alert.student_id == s.id, Alert.teacher_id == t.id).first()
+        if existing and existing.email_sent:
+            continue
 
-    student_result = supabase.table("student_records") \
-        .select("*").eq("risk_level", "High").execute()
-    students = student_result.data or []
+        success = send_risk_alert(
+            teacher_email=t.email,
+            student_name=s.name,
+            risk_level=s.risk_level,
+            confidence=float(s.confidence or 0)
+        )
 
-    if not students:
-        return {"message": "No high-risk students found. No alerts sent."}
+        if success:
+            if existing:
+                existing.email_sent = True
+                existing.sent_at = datetime.utcnow()
+            else:
+                new_alert = Alert(
+                    student_id=s.id,
+                    teacher_id=t.id,
+                    risk_level=s.risk_level,
+                    confidence=s.confidence,
+                    email_sent=True,
+                    sent_at=datetime.utcnow()
+                )
+                db.add(new_alert)
+            sent_count += 1
 
-    teacher_result = supabase.table("users").select("*").eq("role", "teacher").execute()
-    teachers = teacher_result.data or []
-
-    alerts_sent = 0
-    for teacher in teachers:
-        teacher_students = [s for s in students if s.get("teacher_id") == teacher["id"]]
-        if teacher_students:
-            background_tasks.add_task(
-                send_high_risk_alert,
-                teacher_email=teacher["email"],
-                teacher_name=teacher["name"],
-                students=teacher_students,
-            )
-            alerts_sent += 1
-
-    return {
-        "message":         f"Alert emails queued for {alerts_sent} teacher(s).",
-        "high_risk_count": len(students),
-    }
+    db.commit()
+    return {"message": f"Successfully sent {sent_count} alerts."}

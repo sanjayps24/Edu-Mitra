@@ -89,6 +89,9 @@ async function authLogin(email, password, role) {
 async function authRegister({ name, email, password, role, department }) {
   try {
     const data = await apiCall('/auth/register', 'POST', { name, email, password, role, department }, false);
+    if (data.access_token) {
+      saveSession(data);
+    }
     return { success: true, ...data };
   } catch (err) {
     return { success: false, message: err.message };

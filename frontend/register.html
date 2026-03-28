@@ -217,18 +217,21 @@
       try {
         const result = await authRegister({ name, email, password, role, department: dept });
         if (result.success) {
-          okEl.textContent = '✅ Account created! Redirecting to login...';
+          const redirectMap = { student: 'student_dashboard.html', teacher: 'teacher_dashboard.html', admin: 'admin_dashboard.html' };
+          const dashboard = redirectMap[role] || 'login.html';
+          
+          okEl.textContent = '✅ Account created! Redirecting to dashboard...';
           okEl.classList.remove('hidden');
-          setTimeout(() => window.location.href = `login.html?role=${role}`, 2000);
+          setTimeout(() => window.location.href = dashboard, 1500);
         } else {
           errEl.textContent = result.message || 'Registration failed.';
           errEl.classList.remove('hidden');
         }
-      } catch {
-        // Demo fallback
-        okEl.textContent = '✅ Demo: Account simulated! Redirecting...';
-        okEl.classList.remove('hidden');
-        setTimeout(() => window.location.href = `login.html?role=${role}`, 1500);
+      } catch (err) {
+        // Detailed error reporting
+        console.error("Registration Error:", err);
+        errEl.textContent = `❌ Connection Error: ${err.message || "Could not reach the server. Make sure the backend is running at http://localhost:8000"}`;
+        errEl.classList.remove('hidden');
       } finally {
         btn.disabled = false;
         document.getElementById('regSpinner').classList.add('hidden');
