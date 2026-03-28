@@ -12,8 +12,8 @@ from fastapi.security import OAuth2PasswordBearer
 
 from config import JWT_SECRET, JWT_ALGORITHM, JWT_EXPIRE_MINUTES
 
-# Password hashing context (bcrypt)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hashing context (using pbkdf2_sha256 for cross-platform stability)
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 # OAuth2 token scheme — token is extracted from Authorization: Bearer <token>
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
